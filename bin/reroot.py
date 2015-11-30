@@ -42,7 +42,7 @@ class Rerooter:
         child nodes. To create a binary tree, this function will find the two 
         longest distances between the child nodes, find which child node is 
         common to them both, and reroot at the branch connecting that node 
-        to root. For example, the new root will be placed where the "x" is in 
+        to root. For example, the new root will be placed where the "x"     is in 
         the following example tree:
                                       _
                                    __|_     _

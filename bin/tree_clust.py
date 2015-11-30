@@ -110,26 +110,8 @@ class Cluster:
                         idx+=1  
                
         return idx_cluster_hash, hit_idx_hash
-            
-    def _strip_tree(self, tree):
-        '''
-        Remove all current node annotations on the tree (including bootstraps
-        atm, sorry about that.)
-        
-        Parameters
-        ----------
-        tree: skbio TreeNode obj
-            http://scikit-bio.org/docs/latest/generated/skbio.tree.TreeNode.html#skbio.tree.TreeNode        
-        Returns
-        -------
-        'naked' tree
-        '''
-        for node in tree.traverse():
-            if node.is_tip:
-                continue
-            else:
-                node.name = ''
-        return tree
+    
+
 
     def _node_dist(self, node):
         '''
@@ -156,7 +138,20 @@ class Cluster:
                 distances.append(tip_a.distance(tip_b))
             distances=np.array(sorted(distances))
         return distances
+    
+    def _rename(self, node, name):
         
+        if node.name:
+            try: 
+                float(node.name)
+                node.name = "%s:%s" % (node.name,
+                                       name)
+            except:
+                node.name = "%s; %s" % (node.name,
+                                        name)
+        else:
+            node.name = name
+                   
     def depth_first_cluster(self, tree, percentile):
         '''
         Attempt to cluster tree with nodes of tip-to-tip distrubution <
@@ -178,9 +173,7 @@ class Cluster:
         
         http://www.nature.com/ncomms/journal/v2/n5/full/ncomms1325.html
         '''
-        
-        tree = self._strip_tree(tree)
-        
+            
         cluster_count = 1
         clustered = []
         
@@ -208,7 +201,7 @@ node?''')
                 logging.debug("Median of node: %f" % median)
                 if median <= cutoff:
                     logging.debug("Cluster found!")
-                    node.name = "depth_cluster_%i" % cluster_count
+                    self._rename(node, "t__%i" % cluster_count)
                     cluster_count+=1
                     for descenent in node.traverse():
                         clustered.append(descenent)
@@ -236,8 +229,10 @@ node?''')
         cluster_count = 1
         clustered = []
         
-        for node in tree.preorder():
+        for node in tree.postorder():
             if node.is_root():
+                continue
+            elif any([x for x in node.traverse() if x in clustered]):
                 continue
             elif node in clustered:
                 continue
@@ -249,19 +244,51 @@ node?''')
                 
                 in_node = [item for key, item in leaf_lengths.iteritems()
                            if key in tip_names]
-                out_node = [item for key, item in leaf_lengths.iteritems()
-                           if key not in tip_names]
-                t, p = stats.ttest_ind(out_node, in_node)     
-                mean = int(sum(in_node)/len(in_node))           
-                if p < 0.001:
-                    logging.debug("Cluster found!")
-                    if node.name:
-                        node.name = node.name +  "_length_%i" % mean
+                if len(node.siblings()) > 1:
+                    raise MalformedTreeException("Node encountered with more \
+than one sibling!")
+                    exit(1)
+                else:
+                    sibling = node.siblings()[0]
+                    if sibling.is_tip():
+                        continue    
                     else:
-                        node.name = "length_cluster_%i" % mean
-                    cluster_count += 1
-                    for descenent in node.traverse():
-                        clustered.append(descenent)
+                        out_node = [leaf_lengths[x.name\
+                                                  .replace(' ', '_')] 
+                                    for x in sibling.tips()]
+                    t, p = stats.ttest_ind(out_node, in_node)     
+                    in_mean = int(sum(in_node)/len(in_node))           
+                    out_mean = int(sum(out_node)/len(out_node))
+                    if p < 0.00000000001:
+                        self._rename(node, "l__%i" % in_mean)
+                        cluster_count += 1
+                        for descenent in node.traverse():
+                            clustered.append(descenent)
+                        clustered.append(node)
+            
+                    else:
+                        cluster_count += 1
+                        pre_clustered=False
+                        for x in node.parent.non_tips():
+                            if x.name:
+                                if 'l__' in x.name:
+                                    pre_clustered=True
+                        if pre_clustered:
+                            mean = int(sum(in_node)/len(in_node))
+                            self._rename(node, "l__%i" % mean)
+                            
+                            for descenent in node.non_tips():
+                                clustered.append(descenent)
+                            clustered.append(node)  
+                        else:
+                            mean = int(sum(out_node + in_node)/len(out_node + in_node))
+                            self._rename(node.parent, "l__%i" % mean)
+                            
+                            for descenent in node.parent.non_tips():
+                                clustered.append(descenent)
+                            clustered.append(node)    
+                             
+                            
         logging.info("%i length cluster(s) found in tree" % (cluster_count-1))
         return tree
     
@@ -307,16 +334,11 @@ node?''')
 
                 most_common = max(in_node_pfam_fraction.keys())
                 
-                if most_common > 0.60:
+                if most_common > 0.90:
                     logging.debug("Cluster found!")
-                    if node.name:
-                        node.name = node.name +  "_%s_%s" \
-                                        % (suffix,
-                                           in_node_pfam_fraction[most_common])
-                    else:
-                        node.name = "%s_cluster_%s" \
-                                        % (suffix,
-                                           in_node_pfam_fraction[most_common])
+                    self._rename(node, "%s__%s" \
+                                        % (suffix, 
+                                           in_node_pfam_fraction[most_common]))
                     cluster_count += 1
                     for descenent in node.traverse():
                         clustered.append(descenent)
@@ -400,10 +422,80 @@ node?''')
         for key, entry in gene_to_annotations.iteritems():
             gene_to_annotations[key] = ','.join(entry)
 
-        return self.annotation_cluster(tree, gene_to_annotations, "synteny")
+        return self.annotation_cluster(tree, gene_to_annotations, "s")
                     
                     
+    def taxonomy_partition(self, tree, gene_to_taxonomy):
+        '''
+        Partition the tree into strict taxonomy clades. This code currently 
+        does not allow for inconsistency within a clade of any fashion, but 
+        should be flexible enough to integrate easily should the need arise.
+        As a result, taxonomy decoration can be quite messy with this code,
+        particularly if you have many HGT events. Because this causes 
+        paraphyletic groups in what is supposed to be monophyletic, a simple 
+        tally system distinguished taxonomic groupings.
+        
+        Parameters
+        ----------
+        tree: skbio TreeNode obj
+            http://scikit-bio.org/docs/latest/generated/skbio.tree.TreeNode.html#skbio.tree.TreeNode
+        
+        gene_to_taxonomy: dict
+            In the following format:
+                
+                {tip_name_1: 'class': 'c__Gammaproteobacteria',
+                             'domain': 'd__Bacteria',
+                             'family': 'f__Pasteurellaceae',
+                             'genus': 'g__Actinobacillus_Mannheimia',
+                             'order': 'o__Pasteurellales',
+                             'phylum': 'p__Proteobacteria',
+                             'species': 's__varigena'}
+                 .... etc
+                 }
+                 
+        Returns
+        -------
+        skbio TreeNode object'''
+        
+        taxonomy_array = ["domain", "phylum", "class", "order", "family", 
+                          "genus", "species"]
+        assigned_nodes = set()
+        
+        for node in tree.preorder():
+            if node not in assigned_nodes:
+                
+                tax_string_array = []
+                
+                for rank in taxonomy_array:
+                    rank_tax = \
+                        Counter([gene_to_taxonomy[tip\
+                                                    .name\
+                                                    .replace(' ','_')][rank] 
+                                 for tip in node.tips()])
+                        
+                    consistent = (True if len(rank_tax) == 1 else False)
                     
+                    if consistent:
+                        tax_string_array.append(rank_tax.keys()[0])
+                    else:
+                        continue
+            tax_string_array = [x for x in tax_string_array if len(x)>3]
+            if any(tax_string_array):
+                
+                index = 0
+                for anc in node.ancestors():
+                    try:
+                        index+=anc.tax
+                        if "d__" in anc.name:break
+                    except:
+                        continue
+                tax_string_array = tax_string_array[index:]
+                
+                if len(tax_string_array) >0:
+                    self._rename(node, '; '.join(tax_string_array))
+                    node.tax = len(tax_string_array)
+            
+        return tree
                     
                     
                     

@@ -108,6 +108,26 @@ class FunDec:
 
     def _open_tree(self, tree_path):
         tree_obj=TreeNode.read(open(tree_path))
+        bootstrapped = True
+        for node in tree_obj.non_tips():
+            if node.name:
+                try:
+                    float(node.name)
+                except:
+                    logging.debug("Tree is decorated already. Stripping all \
+    previous decoration from the tree.")
+                    bootstrapped = False
+                    tree_obj = self._strip_tree(tree_obj)
+                    break
+            else:
+                if bootstrapped:
+                    logging.warning("This tree doesn't appear correctly \
+formatted or there is information missing. No boostrap value or decoration \
+found for bare node. ")
+                    bootstrapped = False
+        if bootstrapped:
+            logging.debug("Tree is bootstrap or has confidence values \
+assigned to the nodes.")
         return tree_obj
     
     # ---------------------------- Manipulating ----------------------------- #
@@ -124,7 +144,7 @@ class FunDec:
                                         float(count)/total_annotations
         return counted_annotations_relab
 
-    def  _gather_ancestors(self, node):
+    def _gather_ancestors(self, node):
         previous_clade = []
         for ancestor in node.ancestors():
             if ancestor.name:
@@ -132,14 +152,52 @@ class FunDec:
                     previous_clade.append(ancestor.name)
         return previous_clade
 
+    def _strip_tree(self, tree):
+        '''
+        Remove all current node annotations on the tree (including bootstraps
+        atm, sorry about that.)
+        
+        Parameters
+        ----------
+        tree: skbio TreeNode obj
+            http://scikit-bio.org/docs/latest/generated/skbio.tree.TreeNode.html#skbio.tree.TreeNode        
+        Returns
+        -------
+        'naked' tree
+        '''
+        for node in tree.traverse():
+            if node.is_tip:
+                continue
+            else:
+                node.name = ''
+        return tree
+
+
     # =============================== MAIN ================================== #
     def main(self, tree_path, database_path, output_path, percentile,
-             length, context_distance, pfam, classification):
+             length, context_distance, pfam, classification, taxonomy):
         if database_path:
             database = self._parse_db_file(database_path)
-        tree     = self._open_tree(tree_path)
+        
+        tree = self._open_tree(tree_path)
         c = Cluster()
-        Rerooter().reroot(tree)
+        Rerooter().reroot(tree)        
+        
+        if taxonomy:
+            logging.info("Partitioning tree by taxonomy")
+            
+            logging.debug("Gathering taxonomy of tips")
+            taxonomy_partition = {}
+            for key, item in database.iteritems():
+                taxonomy_partition[key]={"domain":item["domain"],
+                                         "phylum":item["phylum"],
+                                         "class":item["class"],
+                                         "order":item["order"],
+                                         "family":item["family"],
+                                         "genus":item["genus"],
+                                         "species":item["species"]}
+                
+            tree = c.taxonomy_partition(tree, taxonomy_partition)    
         
         if percentile:
             logging.info("Identifying depth clusters in tree using %ith percentile\
@@ -162,7 +220,7 @@ tree")
                 logging.info("All tips share the same annotation. \
 Nothing to annotate!")
             else:
-                tree=c.annotation_cluster(tree, annotations, "annotation")
+                tree=c.annotation_cluster(tree, annotations, "a")
                 
                 
         if pfam:
@@ -174,7 +232,7 @@ Nothing to annotate!")
                 logging.info("All tips share the same pfam annotations. \
 Nothing to annotate!")
             else:
-                tree=c.annotation_cluster(tree, pfam_annotations, "PFAM")
+                tree=c.annotation_cluster(tree, pfam_annotations, "m")
         
 
         
@@ -236,6 +294,9 @@ context")
             tree=c.synteny_cluster(tree, gene_to_context_ids, 
                                    gene_to_genome_file, self.db_name,
                                    genome_to_gff, database)
+        
+  
+            
             
         # Old code. Not sure if redundant.
         #for node in tree.preorder():
@@ -302,6 +363,9 @@ percentile cutoff - recommended = 10)',
     parser.add_argument('--annotation', 
                         help='Attempt to clade by classification', 
                         action="store_true")
+    parser.add_argument('--taxonomy', 
+                        help='Clade by taxonomy', 
+                        action="store_true")
     parser.add_argument('--context', 
                         help='Attempt to clade by genetic context', 
                         action="store_true")
@@ -332,7 +396,8 @@ percentile cutoff - recommended = 10)',
             args.length,
             args.context,
             args.pfam,
-            args.annotation)
+            args.annotation,
+            args.taxonomy)
 
     exit(0)
     
