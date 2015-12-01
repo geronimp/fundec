@@ -216,74 +216,7 @@ assigned to the nodes.")
                                                             % (output_path))
         tree.write(output_path, format = "newick")       
 
-                
-# --------------------------------------------------------------------------- #
-# --------------------------------------------------------------------------- #
-# ----------------- Deprecated for now. I'll come back to this. ------------- #
-# --------------------------------------------------------------------------- #
-# --------------------------------------------------------------------------- #
-#        if context_distance:
-#            logging.info("Identifying clusters in tree with different gene \
-#context")   
-#            # Hard coding paths is a no-no!
-#            GFF_DB = "/srv/projects/abisko/Joel/99_phd/01_Projects/08_gpkgs_for_ko_groups/data/gff_database/"
-#            genome_to_gff = {}
-#            gene_to_context_ids = {}
-#            gene_to_genome_file = {}
-#            poor_headers = {}
-#            for tip in tree.tips():
-#                name = tip.name.replace(' ', '_')
-#                genome_id = database[name]['genome_id']
-                ############################################################
-                ############################################################
-                ## This part is real hacky and a result of me pulling in  ##
-                ## sequences from multiple databases and in part because  ##
-                ## of my poor planning.                                   ##
-#                if '~' in name:
-#                    if "~U_" in name:
-#                        poor_headers[name]='_'.join(name.split('~')[0]\
-#                                                        .split('_')[-2:])
-#                        gene_to_genome_file[name] = os.path.join(self.GTDB_GENOME_DB,
-#                                                                "%s.faa" % genome_id) 
-#                    else:
-#                        cmd = "grep '%s' %s" % (name, self.HEADER_DB)
-#                        
-#                        poor_headers[name]=subprocess\
-#                                            .check_output(cmd, shell=True)\
-#                                            .strip().split(',')[1]  
-#                        gene_to_genome_file[name] = os.path.join(self.IMG_GENOME_DB,
-#                                                                genome_id,
-#                                                                "%s.genes.faa" % genome_id)    
 
-#                else:
-#                    gene_to_genome_file[name] = os.path.join(self.IMG_GENOME_DB,
-#                                        genome_id,
-#                                        "%s.genes.faa" % genome_id)        
-                ############################################################
-                ############################################################   
-            
-#                gff_path = os.path.join(GFF_DB,
-#                                        database[name]['source'].upper(),
-#                                        "%s.gff" % genome_id)
-#                if genome_id not in genome_to_gff:
-#                    gff=Gff(open(gff_path))
-#                    gene_to_context_ids[name] = gff\
-#                                        .surrounding((poor_headers[name] if '~' in name 
-#                                                      else name), 
-#                                                      1)
-#                    genome_to_gff[genome_id] = gff
-#                else:
-#                    gene_to_context_ids[name] = genome_to_gff[genome_id]\
-#                                        .surrounding((poor_headers[name] if '~' in name 
-#                                                      else name), 
-#                                                      1)
-#            tree=c.synteny_cluster(tree, gene_to_context_ids, 
-#                                   gene_to_genome_file, self.db_name,
-#                                   genome_to_gff, database)
-        
-
-
-###############################################################################
 ############################### - Functions - #################################
 
 def check_args(args):

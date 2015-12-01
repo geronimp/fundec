@@ -62,57 +62,6 @@ class MalformedTreeException(Exception):
 ################################ - Classes - ##################################
 
 class Cluster:
-    
-    def _self_blast(self, reads):
-        hit_idx_hash = {}
-        
-        logging.debug("Creating blast database") 
-        cmd = 'makeblastdb -in %s -dbtype prot' % reads
-        subprocess.call(cmd, shell=True)
-        logging.debug("Self blasting")
-        cmd = "blastp -db %s -query %s -out /dev/stdout -outfmt \"6 qseqid sseqid bitscore\" " \
-                                                % (reads, reads)
-        idx_cluster_hash = {}            
-        idx = 0
-
-        logging.debug("Parsing results (single linkage clustering)")
-        for res in subprocess.check_output(cmd, shell=True).strip().split('\n'):
-            query, hit, bit = res.split('\t')
-            if query==hit:continue
-            if float(bit)>100:
-                if query in hit_idx_hash:
-                    if hit in hit_idx_hash:
-                        if hit_idx_hash[query] == hit_idx_hash[hit]:
-                            pass
-                        else:
-                            try:
-                                l1=idx_cluster_hash[hit_idx_hash[query]]
-                                l2=idx_cluster_hash[hit_idx_hash[hit]]
-                                new_l = list(set((l1 + l2)))
-                                idx_cluster_hash[idx]=new_l
-                                
-                                del idx_cluster_hash[hit_idx_hash[query]]
-                                del idx_cluster_hash[hit_idx_hash[hit]]
-                                for i in new_l:
-                                    hit_idx_hash[i]=idx
-                                idx+=1
-                            except:
-                                import IPython ; IPython.embed()
-                    else:
-                        idx_cluster_hash[hit_idx_hash[query]].append(hit)
-                        hit_idx_hash.update({hit:hit_idx_hash[query]})
-                else:
-                    if hit in hit_idx_hash:
-                        idx_cluster_hash[hit_idx_hash[hit]].append(query)
-                        hit_idx_hash.update({query:hit_idx_hash[hit]})
-                    else:
-                        idx_cluster_hash[idx] = [query, hit]
-                        hit_idx_hash.update({query:idx, hit:idx})
-                        idx+=1  
-               
-        return idx_cluster_hash, hit_idx_hash
-    
-
 
     def _node_dist(self, node):
         '''
@@ -351,86 +300,7 @@ than one sibling!")
                         clustered.append(descenent)
         logging.info("%i %s cluster(s) found in tree" % (cluster_count-1, 
                                                          prefix))
-        return tree
-    
-    def synteny_cluster(self, tree, gene_to_context, gene_to_genome_file, 
-                        db_name, genome_to_gff, database):
-        '''
-        Attempt to cluster tree by degree of synteny
-        '''
-        context_to_gene = {}
-        gene_to_annotations={}
-        context_reads = db_name+'_context.faa'
-
-        for gene, group in gene_to_context.iteritems():
-            group = [x for x in group if x]
-            if any(group):
-                logging.debug("Extracting genes surrounding %s" % gene)
-                cmd = "fxtract -H -X -f /dev/stdin %s >> %s" \
-                                                % (gene_to_genome_file[gene],
-                                                   context_reads)
-                
-                process = subprocess.Popen(["bash", "-c", cmd], 
-                                           stdin=subprocess.PIPE,
-                                           stdout=subprocess.PIPE)
-    
-                process.communicate('\n'.join(group))
-                for read in group:
-                    context_to_gene[read]=gene
-                    
-            
-            
-        blast_clusters, hit_idx_hash=self._self_blast(context_reads)
-        clusters = blast_clusters
-        os.remove(context_reads)
-        
-        logging.debug("Adding singletons")
-        for surrounding_group in [x for x in gene_to_context.values()]:
-            for read_id in surrounding_group:
-                if read_id not in hit_idx_hash:
-                    idx = 1+max(clusters)
-                    clusters[idx]=[read_id]
-
-                
-        logging.debug("Renaming clusters according to most abundant annotation")
-        ids = list(clusters.keys())
-        for key in ids:
-            group = clusters[key]
-            annotations = []
-            for gene in group:
-                if gene:
-                    gff=genome_to_gff[database[context_to_gene[gene]]['genome_id']]
-                    annotations.append(gff.identity(gene))
-            try:
-                total = len(group)
-                fraction_annotation = {float(item)/total:key 
-                         for key, item in Counter(annotations)\
-                                                .iteritems()}
-            except:
-                import IPython ; IPython.embed()
-            annotation = fraction_annotation[max(fraction_annotation)]
-            
-            clusters[annotation] = clusters.pop(key)
-
-        logging.debug("Assigning tips with synteny information")
-        for annotation, gene_group in clusters.iteritems():
-            gene_group = [x for x in gene_group if x]
-            
-            if any(gene_group):
-                
-                for gene in gene_group:
-                    if context_to_gene[gene] not in gene_to_annotations:
-                        gene_to_annotations[context_to_gene[gene]] = [annotation]  
-                    else:
-                        gene_to_annotations[context_to_gene[gene]] = \
-                                        sorted(gene_to_annotations[context_to_gene[gene]] + [annotation])
-            else:
-                gene_to_annotations[context_to_gene[gene]]=["no_annotated_genes"]
-        for key, entry in gene_to_annotations.iteritems():
-            gene_to_annotations[key] = ','.join(entry)
-
-        return self.annotation_cluster(tree, gene_to_annotations, "s")
-                    
+        return tree                    
                     
     def taxonomy_decoration(self, tree, gene_to_taxonomy):
         '''
