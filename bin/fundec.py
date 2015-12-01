@@ -49,7 +49,6 @@ from collections import Counter
 
 # Local imports
 from reroot import Rerooter
-from gff import Gff
 from tree_clust import Cluster
 from read_database import ReadDatabase
 
