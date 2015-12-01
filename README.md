@@ -24,9 +24,9 @@ fundec.py --depth 5 10 20 --tree my.tree --output my_decorated.tree
 A table can be given to fundec with the sequence name as the first column, followed by columns filled with information you wish to decorate with:
 
 There are three types of information you can decorate with:
-*''numeric'' numeric based decoration will occur if all rows in a column are numbers. Approach will iterate through the tree is post order, and use a basic student's t-test to identify clades with significantly different values to that of its closest sibling clade.
-*''string'' String based decoration will iterate through the tree and cluster node that have a > 80% consensus of all tips from that node.
-*''taxonomy'' Taxonomy based decoration is a special instance of string based decoration. A column with the header 'taxonomy' filled with taxonomy strings will automatically decorate the tree with taxonomy. The approach used by fundec is simplistic in that it will not cluster clades with any inconsistent taxonomy. This means it isfar more strict than software such as [Tax2Tree](https://github.com/biocore/tax2tree). Expect clades to be broken.
+* **numeric** numeric based decoration will occur if all rows in a column are numbers. Approach will iterate through the tree is post order, and use a basic student's t-test to identify clades with significantly different values to that of its closest sibling clade.
+* **string** String based decoration will iterate through the tree and cluster node that have a > 80% consensus of all tips from that node.
+* **taxonomy** Taxonomy based decoration is a special instance of string based decoration. A column with the header 'taxonomy' filled with taxonomy strings will automatically decorate the tree with taxonomy. The approach used by fundec is simplistic in that it will not cluster clades with any inconsistent taxonomy. This means it isfar more strict than software such as [Tax2Tree](https://github.com/biocore/tax2tree). Expect clades to be broken.
 
 Provide the table as either a .csv or a .tsv file to the --database flag as in the following example:
 
