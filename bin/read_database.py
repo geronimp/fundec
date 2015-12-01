@@ -39,11 +39,6 @@ __status__ = "Development"
 import sys
 import argparse
 import logging
-import os
-import shutil
-
-from skbio.tree import TreeNode
-from collections import Counter
 
 # Local imports
 from reroot import Rerooter
@@ -51,15 +46,68 @@ from reroot import Rerooter
 ###############################################################################
 ############################### - Exceptions - ################################
 
-class BadTreeFileException(Exception):
+class MisformattedTable(Exception):
     pass
 
 ###############################################################################
 ################################ - Classes - ##################################
 
-class FunDec:
+class ReadDatabase:
     
-    # ------------------------------- Parsing ------------------------------- #
+    _TYPE_NUMERIC = "numeric"
+    _TYPE_STRING = "string"
     
-    # ---------------------------- Manipulating ----------------------------- #
+    def __init__(self, database, deliminator):
+        '''
+        '''
+        self.database = {}
+        
+        self.fieldnames = database.readline()\
+                                  .strip()\
+                                  .split(deliminator)
 
+        database_hash = {fieldname:{} for fieldname in self.fieldnames}
+        
+        for line in database:    
+            columns = line.strip().split(deliminator)
+            if len(columns)!=len(self.fieldnames):
+                raise MisformattedTable("Number of columns in database are \
+not the same for all rows!")
+                
+            for index, column_entry in enumerate(columns):
+                if index == 0:
+                    row_name = column_entry
+                else:
+                    fieldname = self.fieldnames[index]
+                    database_hash[fieldname][row_name] = column_entry
+                    
+        for fieldname, entries in database_hash.iteritems():
+            type = self._TYPE_NUMERIC
+            for index, entry in enumerate(entries.values()):
+                try:
+                    int(entry)
+                except:
+                    type = self._TYPE_STRING
+                    
+            if type == self._TYPE_NUMERIC:
+                for entry, item in entries.iteritems():
+                    entries[entry] = int(item) 
+                
+            self.database[fieldname] = DatabaseField(fieldname,
+                                                     entries,
+                                                     type)
+
+    def columns(self):
+        return self.fieldnames[1:]
+
+    def field(self, field):
+        return self.database[field]
+    
+class DatabaseField(ReadDatabase):
+    
+    def __init__(self, field_name, entries, type):
+        self.field_name = field_name
+        self.entries = entries
+        self.values = entries.values()
+        self.type = type
+    
