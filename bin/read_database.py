@@ -58,8 +58,7 @@ class ReadDatabase:
     _TYPE_STRING = "string"
     
     def __init__(self, database, deliminator):
-        '''
-        '''
+        
         self.database = {}
         
         self.fieldnames = database.readline()\

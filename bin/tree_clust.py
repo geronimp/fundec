@@ -152,7 +152,7 @@ class Cluster:
         else:
             node.name = name
                    
-    def depth_first_cluster(self, tree, percentile):
+    def depth_first_cluster(self, tree, percentile, index):
         '''
         Attempt to cluster tree with nodes of tip-to-tip distrubution <
         an nth percentile cutoff of the whole-tree distance distribution. 
@@ -166,6 +166,10 @@ class Cluster:
         percentile: float
             The percentile cutoff to use to determine the cutoff from clading
             from a given node.
+        
+        index: int
+            Number indicating the current iteration round of clustering. This 
+            number assists the distinction of depth clusters.
         
         Clustering method modified from Prosperi et al method:
         Prosperi, M.C.F., et al. A novel methodology for large-scale phylogeny 
@@ -201,7 +205,7 @@ node?''')
                 logging.debug("Median of node: %f" % median)
                 if median <= cutoff:
                     logging.debug("Cluster found!")
-                    self._rename(node, "t__%i" % cluster_count)
+                    self._rename(node, "t__%i-%i" % (index, cluster_count))
                     cluster_count+=1
                     for descenent in node.traverse():
                         clustered.append(descenent)

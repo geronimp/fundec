@@ -2,10 +2,10 @@
 ###############################################################################
 #
 # fundec.py <tree> <database_file> <%id cutoff>
-# I should probably iclude some reguular expression recognition to make the
+# I should probably include some regular expression recognition to make the
 # counts of each annotation more robust. I imagine that as is this
 # code will only cluster the major branches. I should really set the
-# %ID cutoff high to avoid over clustering. I dont want that to come
+# %ID cutoff high to avoid over clustering. I don't want that to come
 # back to bite.
 #
 ###############################################################################
@@ -51,6 +51,8 @@ from collections import Counter
 from reroot import Rerooter
 from gff import Gff
 from tree_clust import Cluster
+from read_database import ReadDatabase
+
 
 debug={1:logging.CRITICAL,
        2:logging.ERROR,
@@ -75,36 +77,6 @@ class FunDec:
         self.IMG_GENOME_DB = "/srv/db/img/latest/genomes/"
         self.GTDB_GENOME_DB = "/srv/projects/share/for_joel_gtdbgenomes_prokka/ace_genomes_prokka/"
     # ------------------------------- Parsing ------------------------------- #
-    def _parse_db_file(self, database):
-        db_dict = {}
-        for line in open(database):
-            if line.startswith('name'): continue
-            line=line.strip().split('\t')
-            db_dict[line[0]]= {'name':line[0],
-                               'full_name':line[1],
-                               'annotation':line[2],
-                               'tax_string':line[3],
-                               'pfam_ids':line[4],
-                               'pfam_classifications':line[5],
-                               'cog_ids':line[6],
-                               'cog_classifications':line[7],
-                               'tigrfam_ids':line[8],
-                               'tigrfam_classifications':line[9],
-                               'source':line[10],
-                               'Swiss_Prot_annotated':line[11],
-                               'sequence_length':line[12],
-                               'domain':line[13],
-                               'phylum': line[14],
-                               'class': line[15],
-                               'order': line[16],
-                               'family': line[17],
-                               'genus': line[18],
-                               'species': line[19],
-                               'paralog': line[20],
-                               'genome_id': line[21],
-                               'Alignment': line[22],
-                               'classificaton':['%s_homolog' % self.db_name]}
-        return db_dict
 
     def _open_tree(self, tree_path):
         tree_obj=TreeNode.read(open(tree_path))
@@ -174,15 +146,25 @@ assigned to the nodes.")
 
 
     # =============================== MAIN ================================== #
-    def main(self, tree_path, database_path, output_path, percentile,
-             length, context_distance, pfam, classification, taxonomy):
-        if database_path:
-            database = self._parse_db_file(database_path)
+    def main(self, tree_path, output_path, database_path, percentile,
+             context_distance):
         
+        # Setup
         tree = self._open_tree(tree_path)
         c = Cluster()
-        Rerooter().reroot(tree)        
+        Rerooter().reroot(tree)    
+        if database_path:
+            database = ReadDatabase(database_path, '\t') # This will not be hard coded in future
         
+        
+        
+        if percentile:
+            for index, cutoff in enumerate(percentile):
+                logging.info("Identifying depth clusters in tree using %ith percentile\
+ cutoff" % cutoff)
+                tree=c.depth_first_cluster(tree, cutoff, index)
+        tree.write(output_path, format = "newick")
+        exit()
         if taxonomy:
             logging.info("Partitioning tree by taxonomy")
             
@@ -199,10 +181,9 @@ assigned to the nodes.")
                 
             tree = c.taxonomy_partition(tree, taxonomy_partition)    
         
-        if percentile:
-            logging.info("Identifying depth clusters in tree using %ith percentile\
- cutoff" % percentile)
-            tree=c.depth_first_cluster(tree, percentile)
+
+                
+                
         if length:
             logging.info("Identifying length clusters in tree")
             tree=c.length_second_cluster(tree, 
@@ -295,19 +276,6 @@ context")
                                    gene_to_genome_file, self.db_name,
                                    genome_to_gff, database)
         
-  
-            
-            
-        # Old code. Not sure if redundant.
-        #for node in tree.preorder():
-        #    tip_annotations = self._gather_annotations(node.tips(),
-        #                                               database)
-        #    if any([x for x in tip_annotations.values() if x > cutoff]):
-        #        previous_clades = self._gather_ancestors(node)
-        #        key, _ = max(tip_annotations.iteritems(), key=lambda x:x[1])
-        #        new_classification = "a__%s" % key
-        #        if new_classification not in previous_clades:
-        #            node.name = new_classification
         logging.info("Finished clustering! Writing tree to file: %s" \
                                                             % (output_path))
         tree.write(output_path, format = "newick")
@@ -326,13 +294,6 @@ def check_args(args):
     else:
         raise BadTreeFileException("Tree file without one of the following \
 Extensions was provided: %s" % ' '.join(tree_extensions))
-    if not args.database:
-        if not args.length and not args.pfam and not args.context \
-                           and not args.annotation:
-            pass
-        else:
-            logging.error("A database must be provided to use any of the \
-annotation options except depth.")
     return args
 
 ###############################################################################
@@ -352,22 +313,11 @@ tree as best as possible''')
 for everything except depth clading.')
     parser.add_argument('--depth', 
                         help='Attempt to clade by depth (provide a \
-percentile cutoff - recommended = 10)', 
+percentile cutoff, or a list of percentiles (space separated)', 
+                        nargs='+',
                         type = int)
-    parser.add_argument('--length', 
-                        help='Attempt to clade by length', 
-                        action="store_true")
-    parser.add_argument('--pfam', 
-                        help='Attempt to clade by pfam annotation', 
-                        action="store_true")
-    parser.add_argument('--annotation', 
-                        help='Attempt to clade by classification', 
-                        action="store_true")
-    parser.add_argument('--taxonomy', 
-                        help='Clade by taxonomy', 
-                        action="store_true")
     parser.add_argument('--context', 
-                        help='Attempt to clade by genetic context', 
+                        help='Attempt to clade by genetic context (deprecated)', 
                         action="store_true")
     parser.add_argument('--log', 
                         help='Output logging information to this file.')
@@ -390,14 +340,10 @@ percentile cutoff - recommended = 10)',
     fd = FunDec(args.base)
     
     fd.main(args.tree,
-            args.database,
             args.output,
+            args.database,
             args.depth,
-            args.length,
-            args.context,
-            args.pfam,
-            args.annotation,
-            args.taxonomy)
+            args.context)
 
     exit(0)
     
