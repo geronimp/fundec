@@ -73,11 +73,8 @@ class FunDec:
     
     def __init__(self, db_name):
         self.db_name = db_name
-        self.HEADER_DB="/srv/home/s4293811/04_gits/fundec/database/header_db.txt"
-        self.IMG_GENOME_DB = "/srv/db/img/latest/genomes/"
-        self.GTDB_GENOME_DB = "/srv/projects/share/for_joel_gtdbgenomes_prokka/ace_genomes_prokka/"
+        
     # ------------------------------- Parsing ------------------------------- #
-
     def _find_format(self, database_file):
         '''
         Quickly determine if the database file is in tsv or csv format
@@ -136,28 +133,6 @@ found for bare node. ")
             logging.debug("Tree is bootstrap or has confidence values \
 assigned to the nodes.")
         return tree_obj
-    
-    # ---------------------------- Manipulating ----------------------------- #
-    def _gather_annotations(self, tips, db):
-        'Gather annotations into a list, return relative abundances of each'
-        annotations = []
-        for tip in tips:
-            annotations.append(db[tip.name.replace(' ', '_')]['annotation'])
-        counted_annotations = Counter(annotations)
-        total_annotations=float(sum(counted_annotations.values()))
-        counted_annotations_relab={}
-        for annotation, count in counted_annotations.iteritems():
-            counted_annotations_relab[annotation]=\
-                                        float(count)/total_annotations
-        return counted_annotations_relab
-
-    def _gather_ancestors(self, node):
-        previous_clade = []
-        for ancestor in node.ancestors():
-            if ancestor.name:
-                if ancestor.name.startswith('a__'):
-                    previous_clade.append(ancestor.name)
-        return previous_clade
 
     def _strip_tree(self, tree):
         '''
