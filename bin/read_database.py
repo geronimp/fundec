@@ -56,15 +56,16 @@ class ReadDatabase:
     
     _TYPE_NUMERIC = "numeric"
     _TYPE_STRING = "string"
+    _TYPE_TAXONOMY = "taxonomy"
     
     def __init__(self, database, deliminator):
-        
+        logging.info("Parsing input database")
         self.database = {}
         
         self.fieldnames = database.readline()\
                                   .strip()\
                                   .split(deliminator)
-
+        logging.debug("%i columns found" % (len(self.fieldnames)))
         database_hash = {fieldname:{} for fieldname in self.fieldnames}
         
         for line in database:    
@@ -81,17 +82,22 @@ not the same for all rows!")
                     database_hash[fieldname][row_name] = column_entry
                     
         for fieldname, entries in database_hash.iteritems():
-            type = self._TYPE_NUMERIC
-            for index, entry in enumerate(entries.values()):
-                try:
-                    int(entry)
-                except:
-                    type = self._TYPE_STRING
+            
+            if fieldname == "taxonomy":
+                type = self._TYPE_TAXONOMY
+            else:    
+                type = self._TYPE_NUMERIC
+                for index, entry in enumerate(entries.values()):
+                    if not entry.isdigit():
+                        type = self._TYPE_STRING
                     
-            if type == self._TYPE_NUMERIC:
-                for entry, item in entries.iteritems():
-                    entries[entry] = int(item) 
-                
+                if type == self._TYPE_NUMERIC:
+                    for entry, item in entries.iteritems():
+                        entries[entry] = int(item) 
+                        
+            logging.debug("Column %s typed as %s" % (fieldname, 
+                                                     type))
+            
             self.database[fieldname] = DatabaseField(fieldname,
                                                      entries,
                                                      type)
@@ -104,9 +110,28 @@ not the same for all rows!")
     
 class DatabaseField(ReadDatabase):
     
-    def __init__(self, field_name, entries, type):
-        self.field_name = field_name
+    def __init__(self, name, entries, type):
+        self.name = name
         self.entries = entries
         self.values = entries.values()
         self.type = type
+        
+        if type == ReadDatabase._TYPE_TAXONOMY:
+            for key, tax_string in self.entries.iteritems():
+                dom, phy, cla, ord, fam, gen, spe = (tax_string.split('; ')
+                                                     if '; ' in tax_string
+                                                     else tax_string.split(';'))
+                self.entries[key] = {'domain'  : dom,
+                                     'phylum'  : phy,
+                                     'class'   : cla,
+                                     'order'   : ord,
+                                     'family'  : fam,
+                                     'genus'   : gen,
+                                     'species' : spe}
+        
+        
+        
+        
+        
+        
     

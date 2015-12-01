@@ -78,7 +78,42 @@ class FunDec:
         self.GTDB_GENOME_DB = "/srv/projects/share/for_joel_gtdbgenomes_prokka/ace_genomes_prokka/"
     # ------------------------------- Parsing ------------------------------- #
 
+    def _find_format(self, database_file):
+        '''
+        Quickly determine if the database file is in tsv or csv format
+        
+        Parameters
+        ----------
+        database_file: str
+            path to database file
+            
+        Returns
+        -------
+        The character deliminator, either ',' or '\t'
+        '''
+        first_line=open(database_file).readline()
+        if '\t' in first_line:
+            delim = '\t'
+        elif ',' in first_line: # Not even remotely robust.
+            delim = ','
+        return delim
+        
+        
+        
     def _open_tree(self, tree_path):
+        '''
+        Open a tree file, determine what decorations are already present. Strip
+        Unwanted decoration
+        
+        Parameters
+        ----------
+        tree_path: str
+            Path to a file containing a phylogenetic tree, in Newick format.
+            
+        Returns
+        -------
+        skbio TreeNode object
+        '''
         tree_obj=TreeNode.read(open(tree_path))
         bootstrapped = True
         for node in tree_obj.non_tips():
@@ -144,141 +179,109 @@ assigned to the nodes.")
                 node.name = ''
         return tree
 
-
-    # =============================== MAIN ================================== #
-    def main(self, tree_path, output_path, database_path, percentile,
-             context_distance):
+    def main(self, tree_path, output_path, database_path, 
+             percentile, context_distance):
         
         # Setup
         tree = self._open_tree(tree_path)
         c = Cluster()
         Rerooter().reroot(tree)    
-        if database_path:
-            database = ReadDatabase(database_path, '\t') # This will not be hard coded in future
-        
-        
-        
+            
         if percentile:
             for index, cutoff in enumerate(percentile):
                 logging.info("Identifying depth clusters in tree using %ith percentile\
  cutoff" % cutoff)
                 tree=c.depth_first_cluster(tree, cutoff, index)
-        tree.write(output_path, format = "newick")
-        exit()
-        if taxonomy:
-            logging.info("Partitioning tree by taxonomy")
-            
-            logging.debug("Gathering taxonomy of tips")
-            taxonomy_partition = {}
-            for key, item in database.iteritems():
-                taxonomy_partition[key]={"domain":item["domain"],
-                                         "phylum":item["phylum"],
-                                         "class":item["class"],
-                                         "order":item["order"],
-                                         "family":item["family"],
-                                         "genus":item["genus"],
-                                         "species":item["species"]}
-                
-            tree = c.taxonomy_partition(tree, taxonomy_partition)    
         
+        if database_path:
+            delim = self._find_format(database_path)
+            database = ReadDatabase(open(database_path), delim)
+            
+            
+            for column in database.columns():
+                field = database.field(column)
+                logging.info("Decorating using %s" % (field.name))
+                if field.type == ReadDatabase._TYPE_NUMERIC:
+                    tree=c.numeric_decoration(tree, 
+                                              field.entries,
+                                              field.name)
+                elif field.type == ReadDatabase._TYPE_STRING:
+                    tree=c.string_decoration(tree, 
+                                             field.entries, 
+                                             field.name)
+                elif field.type == ReadDatabase._TYPE_TAXONOMY:
+                    tree=c.taxonomy_decoration(tree, field.entries)
+                
+        logging.info("Finished clustering! Writing tree to file: %s" \
+                                                            % (output_path))
+        tree.write(output_path, format = "newick")       
 
                 
-                
-        if length:
-            logging.info("Identifying length clusters in tree")
-            tree=c.length_second_cluster(tree, 
-                                    {name:int(database[name]\
-                                                      ['sequence_length'])
-                                     for name in [x.name.replace(' ', '_') 
-                                                 for x in tree.tips()]})
-            
-        if classification:
-            logging.info("Identifying consistent classification patterns in \
-tree")
-            annotations = {key:item['annotation']
-                                for key, item in database.iteritems()}
-            if len(set(annotations.values()))==1:
-                logging.info("All tips share the same annotation. \
-Nothing to annotate!")
-            else:
-                tree=c.annotation_cluster(tree, annotations, "a")
-                
-                
-        if pfam:
-            logging.info("Identifying pfam annotation clusters in tree")
-            pfam_annotations = {key:','.join(sorted(item\
-                                        ['pfam_classifications'].split(','))) 
-                                for key, item in database.iteritems()}
-            if len(set(pfam_annotations.values()))==1:
-                logging.info("All tips share the same pfam annotations. \
-Nothing to annotate!")
-            else:
-                tree=c.annotation_cluster(tree, pfam_annotations, "m")
-        
-
-        
-        if context_distance:
-            logging.info("Identifying clusters in tree with different gene \
-context")   
-            # Hard coding paths is a no-no!
-            GFF_DB = "/srv/projects/abisko/Joel/99_phd/01_Projects/08_gpkgs_for_ko_groups/data/gff_database/"
-            genome_to_gff = {}
-            gene_to_context_ids = {}
-            gene_to_genome_file = {}
-            poor_headers = {}
-            for tip in tree.tips():
-                name = tip.name.replace(' ', '_')
-                genome_id = database[name]['genome_id']
+# --------------------------------------------------------------------------- #
+# --------------------------------------------------------------------------- #
+# ----------------- Deprecated for now. I'll come back to this. ------------- #
+# --------------------------------------------------------------------------- #
+# --------------------------------------------------------------------------- #
+#        if context_distance:
+#            logging.info("Identifying clusters in tree with different gene \
+#context")   
+#            # Hard coding paths is a no-no!
+#            GFF_DB = "/srv/projects/abisko/Joel/99_phd/01_Projects/08_gpkgs_for_ko_groups/data/gff_database/"
+#            genome_to_gff = {}
+#            gene_to_context_ids = {}
+#            gene_to_genome_file = {}
+#            poor_headers = {}
+#            for tip in tree.tips():
+#                name = tip.name.replace(' ', '_')
+#                genome_id = database[name]['genome_id']
                 ############################################################
                 ############################################################
                 ## This part is real hacky and a result of me pulling in  ##
                 ## sequences from multiple databases and in part because  ##
                 ## of my poor planning.                                   ##
-                if '~' in name:
-                    if "~U_" in name:
-                        poor_headers[name]='_'.join(name.split('~')[0]\
-                                                        .split('_')[-2:])
-                        gene_to_genome_file[name] = os.path.join(self.GTDB_GENOME_DB,
-                                                                "%s.faa" % genome_id) 
-                    else:
-                        cmd = "grep '%s' %s" % (name, self.HEADER_DB)
-                        
-                        poor_headers[name]=subprocess\
-                                            .check_output(cmd, shell=True)\
-                                            .strip().split(',')[1]  
-                        gene_to_genome_file[name] = os.path.join(self.IMG_GENOME_DB,
-                                                                genome_id,
-                                                                "%s.genes.faa" % genome_id)    
+#                if '~' in name:
+#                    if "~U_" in name:
+#                        poor_headers[name]='_'.join(name.split('~')[0]\
+#                                                        .split('_')[-2:])
+#                        gene_to_genome_file[name] = os.path.join(self.GTDB_GENOME_DB,
+#                                                                "%s.faa" % genome_id) 
+#                    else:
+#                        cmd = "grep '%s' %s" % (name, self.HEADER_DB)
+#                        
+#                        poor_headers[name]=subprocess\
+#                                            .check_output(cmd, shell=True)\
+#                                            .strip().split(',')[1]  
+#                        gene_to_genome_file[name] = os.path.join(self.IMG_GENOME_DB,
+#                                                                genome_id,
+#                                                                "%s.genes.faa" % genome_id)    
 
-                else:
-                    gene_to_genome_file[name] = os.path.join(self.IMG_GENOME_DB,
-                                        genome_id,
-                                        "%s.genes.faa" % genome_id)        
+#                else:
+#                    gene_to_genome_file[name] = os.path.join(self.IMG_GENOME_DB,
+#                                        genome_id,
+#                                        "%s.genes.faa" % genome_id)        
                 ############################################################
                 ############################################################   
             
-                gff_path = os.path.join(GFF_DB,
-                                        database[name]['source'].upper(),
-                                        "%s.gff" % genome_id)
-                if genome_id not in genome_to_gff:
-                    gff=Gff(open(gff_path))
-                    gene_to_context_ids[name] = gff\
-                                        .surrounding((poor_headers[name] if '~' in name 
-                                                      else name), 
-                                                      1)
-                    genome_to_gff[genome_id] = gff
-                else:
-                    gene_to_context_ids[name] = genome_to_gff[genome_id]\
-                                        .surrounding((poor_headers[name] if '~' in name 
-                                                      else name), 
-                                                      1)
-            tree=c.synteny_cluster(tree, gene_to_context_ids, 
-                                   gene_to_genome_file, self.db_name,
-                                   genome_to_gff, database)
+#                gff_path = os.path.join(GFF_DB,
+#                                        database[name]['source'].upper(),
+#                                        "%s.gff" % genome_id)
+#                if genome_id not in genome_to_gff:
+#                    gff=Gff(open(gff_path))
+#                    gene_to_context_ids[name] = gff\
+#                                        .surrounding((poor_headers[name] if '~' in name 
+#                                                      else name), 
+#                                                      1)
+#                    genome_to_gff[genome_id] = gff
+#                else:
+#                    gene_to_context_ids[name] = genome_to_gff[genome_id]\
+#                                        .surrounding((poor_headers[name] if '~' in name 
+#                                                      else name), 
+#                                                      1)
+#            tree=c.synteny_cluster(tree, gene_to_context_ids, 
+#                                   gene_to_genome_file, self.db_name,
+#                                   genome_to_gff, database)
         
-        logging.info("Finished clustering! Writing tree to file: %s" \
-                                                            % (output_path))
-        tree.write(output_path, format = "newick")
+
 
 ###############################################################################
 ############################### - Functions - #################################

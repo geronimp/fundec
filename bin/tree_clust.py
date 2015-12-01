@@ -44,6 +44,7 @@ import tempfile
 import subprocess
 import numpy as np
 import os
+import re
 import random
 
 from scipy import stats
@@ -212,7 +213,7 @@ node?''')
         logging.info("%i depth cluster(s) found in tree" % (cluster_count-1))
         return tree
     
-    def length_second_cluster(self, tree, leaf_lengths):
+    def numeric_decoration(self, tree, leaf_lengths, prefix):
         '''
         Attempt to cluster tree based on gene length within clades
         
@@ -228,6 +229,8 @@ node?''')
                 gene_2: 483
                 ...
                 }
+        prefix: str
+            string to distinguish different annotations when decorating
         '''
         
         cluster_count = 1
@@ -263,8 +266,8 @@ than one sibling!")
                     t, p = stats.ttest_ind(out_node, in_node)     
                     in_mean = int(sum(in_node)/len(in_node))           
                     out_mean = int(sum(out_node)/len(out_node))
-                    if p < 0.00000000001:
-                        self._rename(node, "l__%i" % in_mean)
+                    if p < 0.0001:
+                        self._rename(node, "%s__%i" % (prefix, in_mean))
                         cluster_count += 1
                         for descenent in node.traverse():
                             clustered.append(descenent)
@@ -275,18 +278,18 @@ than one sibling!")
                         pre_clustered=False
                         for x in node.parent.non_tips():
                             if x.name:
-                                if 'l__' in x.name:
+                                if ("%s__" % prefix) in x.name:
                                     pre_clustered=True
                         if pre_clustered:
                             mean = int(sum(in_node)/len(in_node))
-                            self._rename(node, "l__%i" % mean)
+                            self._rename(node, "%s__%i" % (prefix, mean))
                             
                             for descenent in node.non_tips():
                                 clustered.append(descenent)
                             clustered.append(node)  
                         else:
                             mean = int(sum(out_node + in_node)/len(out_node + in_node))
-                            self._rename(node.parent, "l__%i" % mean)
+                            self._rename(node.parent, "%s__%i" % (prefix, mean))
                             
                             for descenent in node.parent.non_tips():
                                 clustered.append(descenent)
@@ -296,7 +299,7 @@ than one sibling!")
         logging.info("%i length cluster(s) found in tree" % (cluster_count-1))
         return tree
     
-    def annotation_cluster(self, tree, annotations, suffix):
+    def string_decoration(self, tree, annotations, prefix):
         '''
         Attempt to cluster tree based on pfam annotations awarded to eahc leaf
         
@@ -312,7 +315,7 @@ than one sibling!")
                 gene_2: 'MCR_alpha'
                 ...
                 }
-        suffix: str
+        prefix: str
             string to distinguish different annotations when decorating
         '''
         cluster_count = 1
@@ -341,13 +344,13 @@ than one sibling!")
                 if most_common > 0.90:
                     logging.debug("Cluster found!")
                     self._rename(node, "%s__%s" \
-                                        % (suffix, 
+                                        % (prefix, 
                                            in_node_pfam_fraction[most_common]))
                     cluster_count += 1
                     for descenent in node.traverse():
                         clustered.append(descenent)
         logging.info("%i %s cluster(s) found in tree" % (cluster_count-1, 
-                                                         suffix))
+                                                         prefix))
         return tree
     
     def synteny_cluster(self, tree, gene_to_context, gene_to_genome_file, 
@@ -429,7 +432,7 @@ than one sibling!")
         return self.annotation_cluster(tree, gene_to_annotations, "s")
                     
                     
-    def taxonomy_partition(self, tree, gene_to_taxonomy):
+    def taxonomy_decoration(self, tree, gene_to_taxonomy):
         '''
         Partition the tree into strict taxonomy clades. This code currently 
         does not allow for inconsistency within a clade of any fashion, but 
